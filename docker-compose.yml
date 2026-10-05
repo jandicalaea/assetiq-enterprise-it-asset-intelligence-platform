@@ -1,0 +1,89 @@
+name: assetiq
+
+services:
+  mysql:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${DB_DATABASE:-belarc_assets}
+      MARIADB_USER: ${DB_USERNAME:-assetiq}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    ports:
+      - "${DB_HOST_PORT:-3307}:3306"
+    volumes:
+      - assetiq_mysql_data:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_NAME: AssetIQ
+      APP_ENV: local
+      APP_KEY: ${APP_KEY}
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8000
+      FRONTEND_URL: http://localhost:5173
+      SANCTUM_STATEFUL_DOMAINS: localhost:5173,127.0.0.1:5173,localhost,127.0.0.1
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-belarc_assets}
+      DB_USERNAME: ${DB_USERNAME:-assetiq}
+      DB_PASSWORD: ${DB_PASSWORD}
+      SESSION_DRIVER: database
+      SESSION_LIFETIME: 120
+      SESSION_ENCRYPT: "false"
+      SESSION_PATH: /
+      SESSION_DOMAIN: ""
+      CACHE_STORE: database
+      QUEUE_CONNECTION: database
+      ASSETIQ_ADMIN_NAME: ${ASSETIQ_ADMIN_NAME:-AssetIQ Administrator}
+      ASSETIQ_ADMIN_EMAIL: ${ASSETIQ_ADMIN_EMAIL:-admin@assetiq.local}
+      ASSETIQ_ADMIN_PASSWORD: ${ASSETIQ_ADMIN_PASSWORD}
+    ports:
+      - "8000:8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "php -r '$$body=@file_get_contents(\"http://127.0.0.1:8000/up\"); exit($$body===false ? 1 : 0);'"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+      args:
+        VITE_API_ORIGIN: http://localhost:8000
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  assetiq_mysql_data:

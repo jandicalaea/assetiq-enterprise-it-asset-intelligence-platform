@@ -1,0 +1,19 @@
+.git
+.github
+.env
+.env.backup
+.env.production
+.idea
+.vscode
+node_modules
+vendor
+public/build
+public/hot
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+old files
+*.log
+Thumbs.db
+.DS_Store
